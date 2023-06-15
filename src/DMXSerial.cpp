@@ -12,7 +12,9 @@
 #include "Arduino.h"
 #include "DMXSerial.h"
 
-
+#if defined(ARDUINO_ARCH_MEGAAVR) || defined(MCUDUDE_MIGHTYCORE)
+  #define DMX_USE_PORT1
+#endif
 // ----- forwards -----
 
 void _DMXStartSending();
@@ -62,11 +64,14 @@ typedef enum {
 
 // ----- include processor specific definitions and functions.
 
-#if defined(ARDUINO_ARCH_AVR)
+#if defined(ARDUINO_ARCH_AVR) && !defined(MCUDUDE_MIGHTYCORE)
 #include "DMXSerial_avr.h"
 
 #elif defined(ARDUINO_ARCH_MEGAAVR)
 #include "DMXSerial_megaavr.h"
+
+#elif defined(MCUDUDE_MIGHTYCORE)
+#include "DMXSerial_mightycore.h"
 
 #endif
 
@@ -90,10 +95,11 @@ typedef enum {
 DMXMode _dmxMode; // Mode of Operation
 int _dmxModePin; // pin used for I/O direction.
 
+uint8_t _dmxStartCode; // Current State of receiving DMX Bytes
 uint8_t _dmxRecvState; // Current State of receiving DMX Bytes
 int _dmxChannel; // the next channel byte to be sent.
 
-volatile int _dmxMaxChannel = 32; // the last channel used for sending (1..512).
+volatile unsigned int _dmxMaxChannel = 32; // the last channel used for sending (1..32).
 volatile unsigned long _dmxLastPacket = 0; // the last time (using the millis function) a packet was received.
 
 bool _dmxUpdated = true; // is set to true when new data arrived.
@@ -204,12 +210,16 @@ void DMXSerialClass::write(int channel, uint8_t value)
     channel = 1;
   if (channel > DMXSERIAL_MAX)
     channel = DMXSERIAL_MAX;
+  if (value < 0)
+    value = 0;
+  if (value > 255)
+    value = 255;
 
   // store value for later sending
   _dmxData[channel] = value;
 
   // Make sure we transmit enough channels for the ones used
-  if (channel > _dmxMaxChannel) {
+  if (channel > (int)_dmxMaxChannel) {
     _dmxMaxChannel = channel;
     _dmxDataLastPtr = _dmxData + _dmxMaxChannel;
   } // if
@@ -304,6 +314,8 @@ void _DMXStartSending()
 // Setup Hardware for Receiving
 void _DMXStartReceiving()
 {
+  // uint8_t voiddata;
+
   // Enable receiver and Receive interrupt
   _dmxDataPtr = _dmxData;
   _dmxRecvState = STARTUP;
@@ -323,6 +335,7 @@ void _DMXReceived(uint8_t data, uint8_t frameerror)
   if (DmxState == STARTUP) {
     // just ignore any first frame comming in
     _dmxRecvState = IDLE;
+    // Serial.println("startup");
     return;
   }
 
@@ -330,22 +343,40 @@ void _DMXReceived(uint8_t data, uint8_t frameerror)
     // break condition detected.
     _dmxRecvState = BREAK;
     _dmxDataPtr = _dmxData;
+    // Serial.println("break");
 
   } else if (DmxState == BREAK) {
     // first byte after a break was read.
+     //Serial.println(data);
+    _dmxStartCode = DATA;
     if (data == 0) {
       // normal DMX start code (0) detected
       _dmxRecvState = DATA;
       _dmxLastPacket = millis(); // remember current (relative) time in msecs.
       _dmxDataPtr++; // start saving data with channel # 1
 
-    } else {
+    } 
+    // if ((data == 252) || (data == 1) || (data == 4)){
+    //   // normal DMX start code (252 varyscan) detected
+    //   _dmxRecvState = DATA;
+    //   _dmxLastPacket = millis(); // remember current (relative) time in msecs.
+    //   _dmxDataPtr++; // start saving data with channel # 1
+
+    // }    
+    else {
       // This might be a RDM or customer DMX command -> not implemented so wait for next BREAK !
-      _dmxRecvState = DONE;
+      // Serial.println(data);
+      //_dmxRecvState = DONE;
+      _dmxRecvState = DATA;
+      _dmxLastPacket = millis(); // remember current (relative) time in msecs.
+      _dmxDataPtr++; // start saving data with channel # 1
+
     } // if
 
   } else if (DmxState == DATA) {
     // check for new data
+    // Serial.print(data);
+    // Serial.print(" ");
     if (*_dmxDataPtr != data) {
       _dmxUpdated = true;
       // store received data into dmx data buffer.
@@ -355,6 +386,7 @@ void _DMXReceived(uint8_t data, uint8_t frameerror)
 
     if (_dmxDataPtr > _dmxDataLastPtr) {
       // all channels received.
+      // Serial.println("");
       _dmxRecvState = DONE;
     } // if
   } // if
@@ -399,7 +431,7 @@ void _DMXTransmitted()
     _dmxChannel = 1;
 
   } else {
-    if (_dmxChannel < _dmxMaxChannel) {
+    if (_dmxChannel < (int)_dmxMaxChannel) {
       // just send the next data
       _DMX_writeByte(_dmxData[_dmxChannel++]);
     } else {

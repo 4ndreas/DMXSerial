@@ -14,7 +14,10 @@
 #ifndef DMXSERIAL_AVR_H
 #define DMXSERIAL_AVR_H
 
-#if defined(DMXFORMAT) && defined(ARDUINO_ARCH_AVR)
+
+#if defined(DMXFORMAT) && defined(ARDUINO_ARCH_AVR) && !defined(MCUDUDE_MIGHTYCORE)
+
+#warning using avr 
 
 #include "Arduino.h"
 #include "DMXSerial.h"
@@ -30,13 +33,12 @@
 // This is consistent to the Layout of the Arduino DMX Shield http://www.mathertel.de/Arduino/DMXShield.aspx.
 
 // For using the serial port 1 on a Arduino MEGA 2560 board, enable the following DMX_USE_PORT1 definition.
-// #define DMX_USE_PORT1
+#define DMX_USE_PORT1
 
 #if !defined(DMX_USE_PORT1) && defined(USART_RXC_vect)
 // These definitions are used on ATmega8 boards
 #define UCSRnA UCSRA // Control and Status Register A
 #define TXCn TXC // Transmit buffer clear
-#define RXCn RXC
 
 #define UCSRnB UCSRB // USART Control and Status Register B
 
