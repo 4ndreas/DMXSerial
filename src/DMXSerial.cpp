@@ -354,24 +354,18 @@ void _DMXReceived(uint8_t data, uint8_t frameerror)
       _dmxRecvState = DATA;
       _dmxLastPacket = millis(); // remember current (relative) time in msecs.
       _dmxDataPtr++; // start saving data with channel # 1
-
     } 
-    // if ((data == 252) || (data == 1) || (data == 4)){
-    //   // normal DMX start code (252 varyscan) detected
-    //   _dmxRecvState = DATA;
-    //   _dmxLastPacket = millis(); // remember current (relative) time in msecs.
-    //   _dmxDataPtr++; // start saving data with channel # 1
-
-    // }    
-    else {
-      // This might be a RDM or customer DMX command -> not implemented so wait for next BREAK !
-      // Serial.println(data);
-      //_dmxRecvState = DONE;
+    else if ((data == 252) || (data == 1) || (data == 4)){
+      // normal DMX start code (252 varyscan) detected
       _dmxRecvState = DATA;
       _dmxLastPacket = millis(); // remember current (relative) time in msecs.
       _dmxDataPtr++; // start saving data with channel # 1
-
-    } // if
+    }
+    else {
+      // This might be a RDM or customer DMX command -> not implemented so wait for next BREAK !
+      // Serial.println(data);
+      _dmxRecvState = DONE;
+    } 
 
   } else if (DmxState == DATA) {
     // check for new data
